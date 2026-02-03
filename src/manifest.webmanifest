@@ -1,0 +1,17 @@
+{
+    "name": "Rede Girassol RH",
+    "short_name": "Girassol RH",
+    "theme_color": "#0F172A",
+    "background_color": "#F8FAFC",
+    "display": "standalone",
+    "scope": "/",
+    "start_url": "/",
+    "icons": [
+        {
+            "src": "assets/icons/icon-512x512.png",
+            "sizes": "192x192 384x384 512x512",
+            "type": "image/png",
+            "purpose": "maskable any"
+        }
+    ]
+}

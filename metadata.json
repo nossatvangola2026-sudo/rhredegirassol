@@ -1,0 +1,7 @@
+{
+  "name": "Rede Girassol RH",
+  "description": "Sistema de Gestão de Recursos Humanos para Rede Girassol. Controlo de presenças, funcionários e relatórios.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
