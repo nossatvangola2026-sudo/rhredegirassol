@@ -449,25 +449,52 @@ export class AttendanceTrackerComponent {
     e.preventDefault();
     if (!this.exceptionEntry.employeeId || !this.exceptionEntry.date) return;
 
+    const emp = this.data.getEmployeeById(this.exceptionEntry.employeeId);
+    if (!emp) return;
+
+    // Find existing record to avoid duplicates and ensure reflection
+    const existing = this.data.attendance().find(a =>
+      a.employeeId === this.exceptionEntry.employeeId && a.date === this.exceptionEntry.date
+    );
+
     let checkInIso = undefined;
+    let overtimeHours = 0;
 
     if (this.exceptionEntry.type === 'LATE' && this.exceptionEntry.timeIn) {
-      checkInIso = new Date(`${this.exceptionEntry.date}T${this.exceptionEntry.timeIn}`).toISOString();
+      const scheduledStartStr = `${this.exceptionEntry.date}T${emp.scheduleStart || '08:00'}:00`;
+      const actualArrivalStr = `${this.exceptionEntry.date}T${this.exceptionEntry.timeIn}:00`;
+
+      const scheduledStart = new Date(scheduledStartStr);
+      const actualArrival = new Date(actualArrivalStr);
+
+      checkInIso = actualArrival.toISOString();
+
+      // Calculate lateness in hours
+      const diffMs = actualArrival.getTime() - scheduledStart.getTime();
+      const lateHours = Math.max(0, diffMs / (1000 * 60 * 60));
+
+      if (lateHours > 0) {
+        // Discount from current overtime if exists, or set as negative
+        const currentOT = existing?.overtimeHours || 0;
+        overtimeHours = currentOT - lateHours;
+        console.log(`Lateness detected: ${lateHours.toFixed(2)}h. New OT: ${overtimeHours.toFixed(2)}h`);
+      }
     }
 
     const record: AttendanceRecord = {
-      id: `att-${Date.now()}`,
+      id: existing?.id || `att-${Date.now()}`,
       employeeId: this.exceptionEntry.employeeId,
       date: this.exceptionEntry.date,
-      checkIn: checkInIso,
+      checkIn: checkInIso || existing?.checkIn,
+      checkOut: existing?.checkOut, // Preserve checkout if exists
       status: this.exceptionEntry.type,
       isJustified: !!this.exceptionEntry.reason,
-      overtimeHours: 0
+      overtimeHours: overtimeHours
     };
 
-    await this.data.logAttendance(record);
+    const success = await this.data.logAttendance(record);
 
-    if (this.exceptionEntry.reason) {
+    if (success && this.exceptionEntry.reason) {
       const just: Justification = {
         id: `just-${Date.now()}`,
         employeeId: this.exceptionEntry.employeeId,
@@ -481,7 +508,11 @@ export class AttendanceTrackerComponent {
       await this.data.addJustification(just);
     }
 
-    this.showExceptionModal.set(false);
+    if (success) {
+      this.showExceptionModal.set(false);
+    } else {
+      alert('Erro ao guardar o registo. Verifique a consola.');
+    }
   }
 
   async submitJustification() {
@@ -521,7 +552,7 @@ export class AttendanceTrackerComponent {
   }
 
   async revertStatus(record: AttendanceRecord) {
-    if (!confirm('Tem certeza que deseja reverter este registo para PRESENTE? Isso removerá a falta/atraso.')) return;
+    if (!confirm('Tem certeza que deseja reverter este registo para PRESENTE? Isso removerá a falta/atraso e quaisquer justificativas associadas.')) return;
 
     const emp = this.data.getEmployeeById(record.employeeId);
     if (!emp) return;
@@ -539,6 +570,11 @@ export class AttendanceTrackerComponent {
       overtimeHours: 0
     };
 
-    await this.data.logAttendance(resetRecord);
+    const success = await this.data.logAttendance(resetRecord);
+    if (success) {
+      await this.data.deleteJustificationsForEmployeeOnDate(record.employeeId, record.date);
+    } else {
+      alert('Erro ao reverter o status. Consulte a consola.');
+    }
   }
 }

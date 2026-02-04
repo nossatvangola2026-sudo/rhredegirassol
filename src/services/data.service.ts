@@ -398,9 +398,15 @@ export class DataService {
 
   // Attendance Methods
   async logAttendance(record: AttendanceRecord) {
-    const existing = this.attendance().find(r => r.id === record.id);
+    console.log('Logging attendance record:', record);
+
+    // Find existing record by ID or by (employeeId + date)
+    const existing = this.attendance().find(r =>
+      r.id === record.id || (r.employeeId === record.employeeId && r.date === record.date)
+    );
 
     if (existing) {
+      console.log('Matching record found, updating:', existing.id);
       const { error } = await this.supabase.client
         .from('attendance_records')
         .update({
@@ -410,12 +416,17 @@ export class DataService {
           is_justified: record.isJustified,
           overtime_hours: record.overtimeHours
         })
-        .eq('id', record.id);
+        .eq('id', existing.id);
 
-      if (!error) {
-        this.attendance.update(list => list.map(r => r.id === record.id ? record : r));
+      if (error) {
+        console.error('Error updating attendance:', error);
+        return false;
       }
+
+      this.attendance.update(list => list.map(r => r.id === existing.id ? { ...record, id: existing.id } : r));
+      return true;
     } else {
+      console.log('No matching record found, inserting new.');
       const { data, error } = await this.supabase.client
         .from('attendance_records')
         .insert({
@@ -430,7 +441,12 @@ export class DataService {
         .select()
         .single();
 
-      if (data && !error) {
+      if (error) {
+        console.error('Error inserting attendance:', error);
+        return false;
+      }
+
+      if (data) {
         const newRecord: AttendanceRecord = {
           id: data.id,
           employeeId: data.employee_id,
@@ -442,7 +458,9 @@ export class DataService {
           overtimeHours: data.overtime_hours
         };
         this.attendance.update(list => [...list, newRecord]);
+        return true;
       }
+      return false;
     }
   }
 
@@ -495,6 +513,25 @@ export class DataService {
     if (!error) {
       this.justifications.update(list => list.map(j => j.id === just.id ? just : j));
     }
+  }
+
+  async deleteJustificationsForEmployeeOnDate(empId: string, date: string) {
+    console.log(`Deleting justifications for employee ${empId} on date ${date}`);
+    const { error } = await this.supabase.client
+      .from('justifications')
+      .delete()
+      .eq('employee_id', empId)
+      .eq('attendance_date', date);
+
+    if (error) {
+      console.error('Error deleting justifications:', error);
+      return false;
+    }
+
+    this.justifications.update(list =>
+      list.filter(j => !(j.employeeId === empId && j.attendanceDate === date))
+    );
+    return true;
   }
 
   // Bulk Import Logic
