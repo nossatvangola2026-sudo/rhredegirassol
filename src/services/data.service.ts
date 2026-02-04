@@ -262,6 +262,7 @@ export class DataService {
 
   // Employee Methods
   async addEmployee(emp: Employee) {
+    console.log('Attempting to add employee:', emp);
     const { data, error } = await this.supabase.client
       .from('employees')
       .insert({
@@ -280,7 +281,12 @@ export class DataService {
       .select()
       .single();
 
-    if (data && !error) {
+    if (error) {
+      console.error('Error adding employee:', error);
+      return false;
+    }
+
+    if (data) {
       const newEmp: Employee = {
         id: data.id,
         fullName: data.full_name,
@@ -296,10 +302,13 @@ export class DataService {
         scheduleEnd: data.schedule_end
       };
       this.employees.update(list => [...list, newEmp]);
+      return true;
     }
+    return false;
   }
 
   async updateEmployee(emp: Employee) {
+    console.log('Attempting to update employee:', emp);
     const { error } = await this.supabase.client
       .from('employees')
       .update({
@@ -317,9 +326,13 @@ export class DataService {
       })
       .eq('id', emp.id);
 
-    if (!error) {
-      this.employees.update(list => list.map(e => e.id === emp.id ? emp : e));
+    if (error) {
+      console.error('Error updating employee:', error);
+      return false;
     }
+
+    this.employees.update(list => list.map(e => e.id === emp.id ? emp : e));
+    return true;
   }
 
   async deleteEmployee(id: string) {

@@ -249,16 +249,20 @@ export class EmployeeManagerComponent {
 
   async saveEmployee(e: Event) {
     e.preventDefault();
+    let success = false;
 
     if (this.isEditing() && this.currentEmp.id) {
-      await this.data.updateEmployee(this.currentEmp as Employee);
+      success = await this.data.updateEmployee(this.currentEmp as Employee);
     } else {
-      const newEmp: Employee = {
-        ...this.currentEmp as Employee,
-        id: 'emp-' + Date.now(),
-      };
-      await this.data.addEmployee(newEmp);
+      // Remove any temporary ID, Postgres will generate a proper one
+      const { id, ...empData } = this.currentEmp as any;
+      success = await this.data.addEmployee(empData as Employee);
     }
-    this.closeModal();
+
+    if (success) {
+      this.closeModal();
+    } else {
+      alert('Erro ao salvar funcionário. Verifique o console para mais detalhes.');
+    }
   }
 }
