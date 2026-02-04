@@ -214,7 +214,7 @@ import { CommonModule } from '@angular/common';
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
-                @for (record of filteredRecords(); track record.id) {
+                @for (record of filteredRecords(); track (record.id + record.status + record.isJustified)) {
                   <tr class="hover:bg-gray-50 transition-colors">
                     <td class="px-6 py-4 whitespace-nowrap">
                       <div class="text-sm font-medium text-gray-900">{{ getEmployeeName(record.employeeId) }}</div>
@@ -226,8 +226,10 @@ import { CommonModule } from '@angular/common';
                         <div class="text-sm text-gray-900">
                           {{ record.checkIn | date:'HH:mm' }} - {{ record.checkOut | date:'HH:mm' }}
                         </div>
-                        @if (record.overtimeHours && record.overtimeHours > 0) {
-                          <div class="text-xs text-blue-600 font-bold">+ {{ record.overtimeHours }}h Extras</div>
+                        @if (record.overtimeHours !== 0) {
+                          <div class="text-xs font-bold" [class.text-blue-600]="record.overtimeHours > 0" [class.text-orange-600]="record.overtimeHours < 0">
+                            {{ record.overtimeHours > 0 ? '+ ' : '' }}{{ record.overtimeHours }}h Extras
+                          </div>
                         }
                       }
                     </td>
@@ -235,15 +237,15 @@ import { CommonModule } from '@angular/common';
                       <span [class]="getStatusClass(record.status)" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
                         {{ record.status }}
                       </span>
-                      @if (record.isJustified) {
+                      @if (record.isJustified || hasJustification(record)) {
                         <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                           Justificado
                         </span>
                       }
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      @if (record.status !== 'PRESENT' && auth.hasRole(['ADMIN', 'MANAGER'])) {
-                        <button (click)="revertStatus(record)" class="text-indigo-600 hover:text-indigo-900">Reverter</button>
+                      @if ((record.status !== 'PRESENT' || !record.id.toString().startsWith('virtual-')) && auth.hasRole(['ADMIN', 'MANAGER'])) {
+                        <button (click)="revertStatus(record)" class="text-indigo-600 hover:text-indigo-900 font-bold bg-indigo-50 px-3 py-1 rounded-md hover:bg-indigo-100 transition-colors">Anular / Reverter</button>
                       }
                     </td>
                   </tr>
@@ -363,8 +365,8 @@ export class AttendanceTrackerComponent {
   });
 
   recordsForSelectedDate = computed(() => {
-    const dateStr = this.selectedListDate();
-    const attendance = this.data.attendance().filter(r => r.date === dateStr);
+    const dateStr = this.selectedListDate().trim();
+    const attendance = this.data.attendance().filter(r => r.date.trim() === dateStr);
     const employees = this.data.employees().filter(e => e.status === 'ACTIVE');
 
     return employees.map(emp => {
@@ -392,6 +394,12 @@ export class AttendanceTrackerComponent {
   pendingJustifications = computed(() => {
     return this.data.justifications().sort((a, b) => b.submissionDate.localeCompare(a.submissionDate));
   });
+
+  hasJustification(record: AttendanceRecord): boolean {
+    return this.data.justifications().some(j =>
+      j.employeeId === record.employeeId && j.attendanceDate === record.date
+    );
+  }
 
   getEmployeeName(id: string) {
     return this.data.getEmployeeById(id)?.fullName || 'Desconhecido';

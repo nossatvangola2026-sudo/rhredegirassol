@@ -398,70 +398,54 @@ export class DataService {
 
   // Attendance Methods
   async logAttendance(record: AttendanceRecord) {
-    console.log('Logging attendance record:', record);
+    console.log('Logging attendance record (Upsert):', record);
 
-    // Find existing record by ID or by (employeeId + date)
-    const existing = this.attendance().find(r =>
-      r.id === record.id || (r.employeeId === record.employeeId && r.date === record.date)
-    );
+    const { data, error } = await this.supabase.client
+      .from('attendance_records')
+      .upsert({
+        employee_id: record.employeeId,
+        date: record.date,
+        check_in: record.checkIn,
+        check_out: record.checkOut,
+        status: record.status,
+        is_justified: record.isJustified,
+        overtime_hours: record.overtimeHours
+      }, {
+        onConflict: 'employee_id,date'
+      })
+      .select()
+      .single();
 
-    if (existing) {
-      console.log('Matching record found, updating:', existing.id);
-      const { error } = await this.supabase.client
-        .from('attendance_records')
-        .update({
-          check_in: record.checkIn,
-          check_out: record.checkOut,
-          status: record.status,
-          is_justified: record.isJustified,
-          overtime_hours: record.overtimeHours
-        })
-        .eq('id', existing.id);
-
-      if (error) {
-        console.error('Error updating attendance:', error);
-        return false;
-      }
-
-      this.attendance.update(list => list.map(r => r.id === existing.id ? { ...record, id: existing.id } : r));
-      return true;
-    } else {
-      console.log('No matching record found, inserting new.');
-      const { data, error } = await this.supabase.client
-        .from('attendance_records')
-        .insert({
-          employee_id: record.employeeId,
-          date: record.date,
-          check_in: record.checkIn,
-          check_out: record.checkOut,
-          status: record.status,
-          is_justified: record.isJustified,
-          overtime_hours: record.overtimeHours
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error inserting attendance:', error);
-        return false;
-      }
-
-      if (data) {
-        const newRecord: AttendanceRecord = {
-          id: data.id,
-          employeeId: data.employee_id,
-          date: data.date,
-          checkIn: data.check_in,
-          checkOut: data.check_out,
-          status: data.status,
-          isJustified: data.is_justified,
-          overtimeHours: data.overtime_hours
-        };
-        this.attendance.update(list => [...list, newRecord]);
-        return true;
-      }
+    if (error) {
+      console.error('Error in logAttendance (upsert):', error);
       return false;
     }
+
+    if (data) {
+      const updatedRecord: AttendanceRecord = {
+        id: data.id,
+        employeeId: data.employee_id,
+        date: data.date,
+        checkIn: data.check_in,
+        checkOut: data.check_out,
+        status: data.status,
+        isJustified: data.is_justified,
+        overtimeHours: data.overtime_hours
+      };
+
+      this.attendance.update(list => {
+        const index = list.findIndex(r => r.id === data.id || (r.employeeId === data.employee_id && r.date === data.date));
+        if (index > -1) {
+          const newList = [...list];
+          newList[index] = updatedRecord;
+          return newList;
+        }
+        return [...list, updatedRecord];
+      });
+      console.log('Attendance updated successfully in DB and signal.');
+      return true;
+    }
+    return false;
   }
 
   getAttendanceForEmployee(empId: string) {
