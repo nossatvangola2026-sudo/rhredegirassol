@@ -184,7 +184,15 @@ import { CommonModule } from '@angular/common';
         <!-- Daily Log -->
         <div class="bg-white rounded-xl shadow-sm p-6">
           <div class="flex flex-col sm:flex-row justify-between items-center mb-4 border-b pb-2 gap-2">
-             <h3 class="font-bold text-gray-800">Registos do Dia</h3>
+             <div class="flex items-center gap-4">
+               <h3 class="font-bold text-gray-800">Registos de</h3>
+               <input 
+                 type="date" 
+                 [ngModel]="selectedListDate()" 
+                 (ngModelChange)="selectedListDate.set($event)"
+                 class="px-2 py-1 border border-gray-300 rounded-lg text-sm bg-blue-50 focus:border-blue-500 focus:outline-none font-bold"
+               >
+             </div>
              <input 
                type="text" 
                [ngModel]="tableSearchQuery()" 
@@ -206,7 +214,7 @@ import { CommonModule } from '@angular/common';
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
-                @for (record of filteredTodaysRecords(); track record.id) {
+                @for (record of filteredRecords(); track record.id) {
                   <tr class="hover:bg-gray-50 transition-colors">
                     <td class="px-6 py-4 whitespace-nowrap">
                       <div class="text-sm font-medium text-gray-900">{{ getEmployeeName(record.employeeId) }}</div>
@@ -242,7 +250,7 @@ import { CommonModule } from '@angular/common';
                 } @empty {
                   <tr>
                     <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">
-                      Sem registos para hoje.
+                      Sem registos para esta data.
                     </td>
                   </tr>
                 }
@@ -314,12 +322,14 @@ export class AttendanceTrackerComponent {
 
   exceptionEntry = {
     employeeId: '',
-    date: '',
+    date: new Date().toISOString().split('T')[0],
     type: 'ABSENT' as 'ABSENT' | 'LATE',
     timeIn: '',
     reason: '',
     attachmentUrl: '' // Can be URL or Base64
   };
+
+  selectedListDate = signal(new Date().toISOString().split('T')[0]);
 
   // Justification Modal State
   showJustifyModal = signal(false);
@@ -341,9 +351,9 @@ export class AttendanceTrackerComponent {
     );
   });
 
-  filteredTodaysRecords = computed(() => {
+  filteredRecords = computed(() => {
     const q = this.tableSearchQuery().toLowerCase();
-    const records = this.todaysRecords();
+    const records = this.recordsForSelectedDate();
     if (!q) return records;
     return records.filter(r => {
       const name = this.getEmployeeName(r.employeeId).toLowerCase();
@@ -352,9 +362,9 @@ export class AttendanceTrackerComponent {
     });
   });
 
-  todaysRecords = computed(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const attendance = this.data.attendance().filter(r => r.date === todayStr);
+  recordsForSelectedDate = computed(() => {
+    const dateStr = this.selectedListDate();
+    const attendance = this.data.attendance().filter(r => r.date === dateStr);
     const employees = this.data.employees().filter(e => e.status === 'ACTIVE');
 
     return employees.map(emp => {
@@ -369,12 +379,12 @@ export class AttendanceTrackerComponent {
       return {
         id: `virtual-${emp.id}`,
         employeeId: emp.id,
-        date: todayStr,
-        checkIn: `${todayStr}T${startTime}:00`,
+        date: dateStr,
+        checkIn: `${dateStr}T${startTime}:00`,
         status: 'PRESENT',
         isJustified: false,
         overtimeHours: 0,
-        checkOut: `${todayStr}T${endTime}:00`
+        checkOut: `${dateStr}T${endTime}:00`
       } as AttendanceRecord;
     });
   });

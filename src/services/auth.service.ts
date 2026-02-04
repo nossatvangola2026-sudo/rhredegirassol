@@ -75,7 +75,9 @@ export class AuthService {
 
   hasRole(roles: Role[]): boolean {
     const u = this.currentUser();
-    return u ? roles.includes(u.role) : false;
+    if (!u) return false;
+    const upperRoles = roles.map(r => r.toUpperCase());
+    return upperRoles.includes(u.role.toUpperCase());
   }
 
   async createUser(user: User) {
