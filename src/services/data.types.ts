@@ -1,5 +1,5 @@
 
-export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE';
+export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'COORDENADOR' | 'DIRECTOR';
 
 export interface User {
   id: string;
@@ -7,6 +7,8 @@ export interface User {
   passwordHash: string; // Simplified for demo
   role: Role;
   employeeId?: string; // Link to employee record if applicable
+  departmentId?: string; // For coordinators to restrict data access
+  departmentName?: string; // For display in user list
   mustChangePassword?: boolean;
 }
 

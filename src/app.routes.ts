@@ -6,7 +6,8 @@ import { DepartmentManagerComponent } from './components/departments/department-
 import { DataImportComponent } from './components/import/data-import.component';
 import { AttendanceTrackerComponent } from './components/attendance/attendance-tracker.component';
 import { ReportsComponent } from './components/reports/reports.component';
-import { DeveloperSettingsComponent } from './components/settings/developer-settings.component'; // New Import
+import { DeveloperSettingsComponent } from './components/settings/developer-settings.component';
+import { UserManagerComponent } from './components/users/user-manager.component';
 import { LayoutComponent } from './components/layout/layout.component';
 import { inject } from '@angular/core';
 import { AuthService } from './services/auth.service';
@@ -14,30 +15,43 @@ import { AuthService } from './services/auth.service';
 const authGuard = () => {
   const auth = inject(AuthService);
   const router: Router = inject(Router);
-  
+
   if (auth.isAuthenticated()) {
     return true;
   }
-  
-  // Redirect to login if not authenticated
   return router.createUrlTree(['/login']);
+};
+
+const roleGuard = (allowedRoles: string[]) => {
+  return () => {
+    const auth = inject(AuthService);
+    const router: Router = inject(Router);
+    const user = auth.currentUser();
+
+    if (user && allowedRoles.includes(user.role)) {
+      return true;
+    }
+
+    return router.createUrlTree(['/dashboard']);
+  };
 };
 
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
-  { 
-    path: '', 
+  {
+    path: '',
     component: LayoutComponent,
     canActivate: [authGuard],
     children: [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
       { path: 'dashboard', component: DashboardComponent },
-      { path: 'employees', component: EmployeeManagerComponent },
-      { path: 'departments', component: DepartmentManagerComponent },
-      { path: 'import', component: DataImportComponent },
-      { path: 'attendance', component: AttendanceTrackerComponent },
-      { path: 'reports', component: ReportsComponent },
-      { path: 'settings', component: DeveloperSettingsComponent } // New Route
+      { path: 'employees', component: EmployeeManagerComponent, canActivate: [roleGuard(['ADMIN', 'MANAGER'])] },
+      { path: 'departments', component: DepartmentManagerComponent, canActivate: [roleGuard(['ADMIN', 'MANAGER'])] },
+      { path: 'import', component: DataImportComponent, canActivate: [roleGuard(['ADMIN', 'MANAGER'])] },
+      { path: 'attendance', component: AttendanceTrackerComponent, canActivate: [roleGuard(['ADMIN', 'MANAGER', 'COORDENADOR'])] },
+      { path: 'reports', component: ReportsComponent, canActivate: [roleGuard(['ADMIN', 'MANAGER', 'COORDENADOR'])] },
+      { path: 'users', component: UserManagerComponent, canActivate: [roleGuard(['ADMIN'])] },
+      { path: 'settings', component: DeveloperSettingsComponent, canActivate: [roleGuard(['ADMIN', 'MANAGER'])] }
     ]
   },
   { path: '**', redirectTo: 'login' }

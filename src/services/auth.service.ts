@@ -26,7 +26,7 @@ export class AuthService {
 
     const { data, error } = await this.supabase.client
       .from('users')
-      .select('*')
+      .select('*, departments(name)')
       .eq('username', username)
       .eq('password_hash', passwordHash)
       .single();
@@ -38,6 +38,8 @@ export class AuthService {
         passwordHash: data.password_hash,
         role: data.role as Role,
         employeeId: data.employee_id,
+        departmentId: data.department_id,
+        departmentName: data.departments?.name,
         mustChangePassword: data.must_change_password
       };
       this.currentUser.set(user);
@@ -88,7 +90,61 @@ export class AuthService {
         password_hash: user.passwordHash,
         role: user.role,
         employee_id: user.employeeId || null,
+        department_id: user.departmentId || null,
         must_change_password: user.mustChangePassword ?? true
       });
+  }
+
+  async updateUser(user: User) {
+    const { error } = await this.supabase.client
+      .from('users')
+      .update({
+        username: user.username,
+        role: user.role,
+        department_id: user.departmentId,
+        employee_id: user.employeeId
+      })
+      .eq('id', user.id);
+
+    if (error) {
+      console.error('Error updating user:', error);
+      return false;
+    }
+    return true;
+  }
+
+  async getUsers(): Promise<User[]> {
+    const { data, error } = await this.supabase.client
+      .from('users')
+      .select('*, departments(name)');
+
+    if (error) {
+      console.error('Error fetching users:', error);
+      return [];
+    }
+
+    return data.map(d => ({
+      id: d.id,
+      username: d.username,
+      passwordHash: d.password_hash,
+      role: d.role as Role,
+      employeeId: d.employee_id,
+      departmentId: d.department_id,
+      departmentName: d.departments?.name,
+      mustChangePassword: d.must_change_password
+    }));
+  }
+
+  async deleteUser(userId: string) {
+    const { error } = await this.supabase.client
+      .from('users')
+      .delete()
+      .eq('id', userId);
+
+    if (error) {
+      console.error('Error deleting user:', error);
+      return false;
+    }
+    return true;
   }
 }

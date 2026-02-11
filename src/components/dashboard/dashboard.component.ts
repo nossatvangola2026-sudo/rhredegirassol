@@ -14,18 +14,7 @@ import { AuthService } from '../../services/auth.service';
           <h2 class="text-2xl font-bold text-gray-800">Painel de Controle</h2>
           <p class="text-sm text-gray-500">Gestão centralizada de funcionários e presenças.</p>
         </div>
-        <div class="flex flex-col md:flex-row gap-3">
-          <button (click)="downloadInstaller()" 
-             class="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition shadow-sm text-sm font-medium">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-            App Desktop (.exe)
-          </button>
-          <button (click)="showPWAInstructions()" 
-             class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm text-sm font-medium">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
-            Opção PWA (Fácil)
-          </button>
-        </div>
+
       </div>
       
       <!-- Cards Grid -->

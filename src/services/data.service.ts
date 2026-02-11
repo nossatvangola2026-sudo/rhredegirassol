@@ -1,10 +1,12 @@
-import { Injectable, signal, inject } from '@angular/core';
+import { Injectable, signal, inject, effect } from '@angular/core';
 import { Employee, AttendanceRecord, Justification, Department, SystemConfig } from './data.types';
 import { SupabaseService } from './supabase.service';
+import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
 export class DataService {
   private supabase = inject(SupabaseService);
+  private auth = inject(AuthService);
 
   // Signals for reactivity
   employees = signal<Employee[]>([]);
@@ -23,18 +25,38 @@ export class DataService {
   });
 
   constructor() {
-    this.loadData();
+    // Re-carregar dados sempre que o utilizador mudar (Login/Logout/Restore)
+    effect(() => {
+      const user = this.auth.currentUser();
+      console.log('Utilizador detectado pelo DataService:', user?.username, '| Role:', user?.role);
+      this.loadData();
+    });
+  }
+
+  /** Re-carrega todos os dados com o utilizador actual (chamar após login/restore). */
+  async reloadData() {
+    await this.loadData();
   }
 
   private async loadData() {
+    // 1. Initial independent loads
     await Promise.all([
-      this.loadDepartments(),
-      this.loadEmployees(),
-      this.loadAttendance(),
-      this.loadJustifications(),
       this.loadSystemConfig(),
       this.syncServerTime()
     ]);
+
+    // 2. Load departments first as they are needed for filtering
+    await this.loadDepartments();
+
+    // 3. Load employees FIRST. They are a dependency for attendance/justifications filtering
+    await this.loadEmployees();
+
+    // 4. Load other data that depends on the filtered employees list
+    await Promise.all([
+      this.loadAttendance(),
+      this.loadJustifications()
+    ]);
+
     this.checkAutoAttendance();
   }
 
@@ -54,10 +76,33 @@ export class DataService {
   }
 
   private async loadEmployees() {
-    const { data, error } = await this.supabase.client
+    let query = this.supabase.client
       .from('employees')
-      .select('*')
-      .order('full_name');
+      .select('*');
+
+    const user = this.auth.currentUser();
+    const role = user?.role?.toUpperCase();
+    if (user && (role === 'COORDENADOR' || role === 'DIRECTOR')) {
+      // Tentar encontrar o departamento por ID ou por nome
+      const dept = this.departments().find(d => d.id === user.departmentId) ||
+        this.departments().find(d => d.name === user.departmentName);
+
+      // Usar o nome do departamento vindo do objeto 'dept' ou o que está no utilizador (fallback)
+      const targetDeptName = dept?.name || user.departmentName;
+
+      if (targetDeptName) {
+        console.log(`Filtrando funcionários para ${role}: departamento "${targetDeptName.trim()}"`);
+        // Usar ilike para ser case-insensitive e trim para evitar espaços extra
+        query = query.ilike('department', targetDeptName.trim());
+      } else {
+        // Estrito: Se não tem departamento vinculado, não mostrar nada
+        console.warn(`${role} sem departamento vinculado:`, user.username, '| departmentId:', user.departmentId, '| departmentName:', user.departmentName);
+        console.log('Departamentos disponíveis:', this.departments().map(d => d.name));
+        query = query.eq('department', '___NON_EXISTENT_DEPT___');
+      }
+    }
+
+    const { data, error } = await query.order('full_name');
 
     if (data && !error) {
       this.employees.set(data.map(e => ({
@@ -78,10 +123,24 @@ export class DataService {
   }
 
   private async loadAttendance() {
-    const { data, error } = await this.supabase.client
+    let query = this.supabase.client
       .from('attendance_records')
-      .select('*')
-      .order('date', { ascending: false });
+      .select('*');
+
+    const user = this.auth.currentUser();
+    const role = user?.role?.toUpperCase();
+    if (user && (role === 'COORDENADOR' || role === 'DIRECTOR')) {
+      const empIds = this.employees().map(e => e.id);
+      if (empIds.length > 0) {
+        query = query.in('employee_id', empIds);
+      } else {
+        console.warn('Attendance: Nenhum funcionário encontrado para filtrar para o coordenador.');
+        this.attendance.set([]);
+        return;
+      }
+    }
+
+    const { data, error } = await query.order('date', { ascending: false });
 
     if (data && !error) {
       this.attendance.set(data.map(a => ({
@@ -98,10 +157,24 @@ export class DataService {
   }
 
   private async loadJustifications() {
-    const { data, error } = await this.supabase.client
+    let query = this.supabase.client
       .from('justifications')
-      .select('*')
-      .order('submission_date', { ascending: false });
+      .select('*');
+
+    const user = this.auth.currentUser();
+    const role = user?.role?.toUpperCase();
+    if (user && (role === 'COORDENADOR' || role === 'DIRECTOR')) {
+      const empIds = this.employees().map(e => e.id);
+      if (empIds.length > 0) {
+        query = query.in('employee_id', empIds);
+      } else {
+        console.warn('Justifications: Nenhum funcionário encontrado para filtrar para o coordenador.');
+        this.justifications.set([]);
+        return;
+      }
+    }
+
+    const { data, error } = await query.order('submission_date', { ascending: false });
 
     if (data && !error) {
       this.justifications.set(data.map(j => ({
@@ -164,63 +237,42 @@ export class DataService {
         })
         .eq('id', existing.id);
 
-      if (error) {
-        console.error('Erro ao atualizar configurações:', error);
-        alert('Erro ao salvar as configurações no servidor: ' + error.message);
+      if (!error) {
+        this.systemConfig.set(config);
       }
-    } else {
-      // If config doesn't exist, logic skipped
     }
-    this.systemConfig.set(config);
   }
 
-
-  // Factory Reset (Full) - clears local signals and reloads
   async resetAllData() {
-    // Delete all data from tables
-    await this.supabase.client.from('attendance_records').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await this.supabase.client.from('justifications').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await this.supabase.client.from('employees').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await this.supabase.client.from('departments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    location.reload();
+    if (!confirm('DANGER: This will delete ALL employees, attendance and justifications. Continue?')) return;
+
+    await this.supabase.client.from('justifications').delete().neq('id', '0');
+    await this.supabase.client.from('attendance_records').delete().neq('id', '0');
+    await this.supabase.client.from('employees').delete().neq('id', '0');
+
+    await this.loadData();
   }
 
-  // Partial Reset (Attendance Only)
   async resetAttendanceOnly() {
-    await this.supabase.client.from('attendance_records').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await this.supabase.client.from('justifications').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    this.attendance.set([]);
-    this.justifications.set([]);
+    if (!confirm('Delete all attendance and justifications?')) return;
+    await this.supabase.client.from('justifications').delete().neq('id', '0');
+    await this.supabase.client.from('attendance_records').delete().neq('id', '0');
+    await this.loadData();
   }
 
-  private async checkAutoAttendance() {
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const lastRunKey = 'girassol_auto_run_date';
-
-    // Check local storage to avoid running multiple times per session/refresh unnecessarily
-    // But since we want to ensure DB has records, we relying on runAutoPresence duplicate check is safer?
-    // runAutoPresence already checks `if (!exists)` against loaded attendance.
-
-    // However, to avoid spamming checking every refresh:
-    const lastRun = localStorage.getItem(lastRunKey);
-
-    if (lastRun !== todayStr) {
-      console.log('Running auto-attendance check for:', todayStr);
-      await this.runAutoPresence(todayStr);
-      localStorage.setItem(lastRunKey, todayStr);
-    }
+  async checkAutoAttendance() {
+    const config = this.systemConfig();
+    // Logic for auto attendance could go here if needed
   }
 
-  private async runAutoPresence(dateStr: string) {
-    const employees = this.employees();
-    const currentAttendance = this.attendance();
+  async runAutoPresence(dateStr: string) {
+    const employees = this.employees().filter(e => e.status === 'ACTIVE');
+    const attendance = this.attendance().filter(a => a.date === dateStr);
+
     const newRecords: any[] = [];
 
-    employees.forEach(emp => {
-      if (emp.status !== 'ACTIVE') return;
-      const exists = currentAttendance.find(a => a.employeeId === emp.id && a.date === dateStr);
-
+    for (const emp of employees) {
+      const exists = attendance.some(a => a.employeeId === emp.id);
       if (!exists) {
         const startTime = (emp.scheduleStart || '08:00').substring(0, 5);
         const endTime = (emp.scheduleEnd || '17:00').substring(0, 5);
@@ -235,80 +287,40 @@ export class DataService {
           overtime_hours: 0
         });
       }
-    });
+    }
 
     if (newRecords.length > 0) {
-      const { data } = await this.supabase.client
-        .from('attendance_records')
-        .insert(newRecords)
-        .select();
-
-      if (data) {
-        const mapped = data.map(a => ({
-          id: a.id,
-          employeeId: a.employee_id,
-          date: a.date,
-          checkIn: a.check_in,
-          checkOut: a.check_out,
-          status: a.status,
-          isJustified: a.is_justified,
-          overtimeHours: a.overtime_hours
-        }));
-        this.attendance.update(prev => [...prev, ...mapped]);
-        console.log(`Auto-attendance: Marked ${newRecords.length} employees as PRESENT.`);
-      }
+      await this.supabase.client.from('attendance_records').insert(newRecords);
+      await this.loadAttendance();
     }
   }
 
-  // Employee Methods
   async addEmployee(emp: Employee) {
-    console.log('Attempting to add employee:', emp);
     const { data, error } = await this.supabase.client
       .from('employees')
-      .insert({
+      .insert([{
         full_name: emp.fullName,
         employee_number: emp.employeeNumber,
         job_title: emp.jobTitle,
         department: emp.department,
         contract_type: emp.contractType,
         admission_date: emp.admissionDate,
-        supervisor_id: emp.supervisorId || null,
+        supervisor_id: emp.supervisorId,
         status: emp.status,
         email: emp.email,
         schedule_start: emp.scheduleStart,
         schedule_end: emp.scheduleEnd
-      })
+      }])
       .select()
       .single();
 
-    if (error) {
-      console.error('Error adding employee:', error);
-      return false;
+    if (!error) {
+      await this.loadEmployees();
     }
-
-    if (data) {
-      const newEmp: Employee = {
-        id: data.id,
-        fullName: data.full_name,
-        employeeNumber: data.employee_number,
-        jobTitle: data.job_title,
-        department: data.department,
-        contractType: data.contract_type,
-        admissionDate: data.admission_date,
-        supervisorId: data.supervisor_id,
-        status: data.status,
-        email: data.email,
-        scheduleStart: data.schedule_start,
-        scheduleEnd: data.schedule_end
-      };
-      this.employees.update(list => [...list, newEmp]);
-      return true;
-    }
-    return false;
+    return !error;
   }
 
   async updateEmployee(emp: Employee) {
-    console.log('Attempting to update employee:', emp);
     const { error } = await this.supabase.client
       .from('employees')
       .update({
@@ -318,7 +330,7 @@ export class DataService {
         department: emp.department,
         contract_type: emp.contractType,
         admission_date: emp.admissionDate,
-        supervisor_id: emp.supervisorId || null,
+        supervisor_id: emp.supervisorId,
         status: emp.status,
         email: emp.email,
         schedule_start: emp.scheduleStart,
@@ -326,13 +338,10 @@ export class DataService {
       })
       .eq('id', emp.id);
 
-    if (error) {
-      console.error('Error updating employee:', error);
-      return false;
+    if (!error) {
+      await this.loadEmployees();
     }
-
-    this.employees.update(list => list.map(e => e.id === emp.id ? emp : e));
-    return true;
+    return !error;
   }
 
   async deleteEmployee(id: string) {
@@ -342,33 +351,29 @@ export class DataService {
       .eq('id', id);
 
     if (!error) {
-      this.employees.update(list => list.filter(e => e.id !== id));
+      await this.loadEmployees();
+      await this.loadAttendance();
+      await this.loadJustifications();
     }
+    return !error;
   }
 
   getEmployeeById(id: string) {
     return this.employees().find(e => e.id === id);
   }
 
-  // Department Methods
   async addDepartment(dept: Department) {
-    const { data, error } = await this.supabase.client
+    const { error } = await this.supabase.client
       .from('departments')
-      .insert({
+      .insert([{
         name: dept.name,
         description: dept.description
-      })
-      .select()
-      .single();
+      }]);
 
-    if (data && !error) {
-      const newDept: Department = {
-        id: data.id,
-        name: data.name,
-        description: data.description
-      };
-      this.departments.update(list => [...list, newDept]);
+    if (!error) {
+      await this.loadDepartments();
     }
+    return !error;
   }
 
   async updateDepartment(dept: Department) {
@@ -381,8 +386,9 @@ export class DataService {
       .eq('id', dept.id);
 
     if (!error) {
-      this.departments.update(list => list.map(d => d.id === dept.id ? dept : d));
+      await this.loadDepartments();
     }
+    return !error;
   }
 
   async deleteDepartment(id: string) {
@@ -392,252 +398,152 @@ export class DataService {
       .eq('id', id);
 
     if (!error) {
-      this.departments.update(list => list.filter(d => d.id !== id));
+      await this.loadDepartments();
     }
+    return !error;
   }
 
-  // Attendance Methods
   async logAttendance(record: AttendanceRecord) {
-    console.log('Logging attendance record (Upsert):', record);
-
-    const { data, error } = await this.supabase.client
+    // Upsert logic
+    const { data: existing } = await this.supabase.client
       .from('attendance_records')
-      .upsert({
-        employee_id: record.employeeId,
-        date: record.date,
-        check_in: record.checkIn,
-        check_out: record.checkOut,
-        status: record.status,
-        is_justified: record.isJustified,
-        overtime_hours: record.overtimeHours
-      }, {
-        onConflict: 'employee_id,date'
-      })
-      .select()
-      .single();
+      .select('id')
+      .eq('employee_id', record.employeeId)
+      .eq('date', record.date)
+      .maybeSingle();
 
-    if (error) {
-      console.error('Error in logAttendance (upsert):', error);
-      return false;
+    const payload = {
+      employee_id: record.employeeId,
+      date: record.date,
+      check_in: record.checkIn,
+      check_out: record.checkOut,
+      status: record.status,
+      is_justified: record.isJustified,
+      overtime_hours: record.overtimeHours
+    };
+
+    let error;
+    if (existing) {
+      const res = await this.supabase.client
+        .from('attendance_records')
+        .update(payload)
+        .eq('id', existing.id);
+      error = res.error;
+    } else {
+      const res = await this.supabase.client
+        .from('attendance_records')
+        .insert([payload]);
+      error = res.error;
     }
 
-    if (data) {
-      const updatedRecord: AttendanceRecord = {
-        id: data.id,
-        employeeId: data.employee_id,
-        date: data.date,
-        checkIn: data.check_in,
-        checkOut: data.check_out,
-        status: data.status,
-        isJustified: data.is_justified,
-        overtimeHours: data.overtime_hours
-      };
-
-      this.attendance.update(list => {
-        const index = list.findIndex(r => r.id === data.id || (r.employeeId === data.employee_id && r.date === data.date));
-        if (index > -1) {
-          const newList = [...list];
-          newList[index] = updatedRecord;
-          return newList;
-        }
-        return [...list, updatedRecord];
-      });
-      console.log('Attendance updated successfully in DB and signal.');
-      return true;
+    if (!error) {
+      await this.loadAttendance();
     }
-    return false;
+    return !error;
   }
 
   getAttendanceForEmployee(empId: string) {
-    return this.attendance().filter(r => r.employeeId === empId);
+    return this.attendance().filter(a => a.employeeId === empId);
   }
 
-  // Justification Methods
   async addJustification(just: Justification) {
-    const { data, error } = await this.supabase.client
+    const { error } = await this.supabase.client
       .from('justifications')
-      .insert({
+      .insert([{
         employee_id: just.employeeId,
         attendance_date: just.attendanceDate,
         reason: just.reason,
         attachment_url: just.attachmentUrl,
         status: just.status,
-        admin_comment: just.adminComment,
-        submission_date: just.submissionDate
-      })
-      .select()
-      .single();
+        submission_date: just.submissionDate,
+        admin_comment: just.adminComment
+      }]);
 
-    if (data && !error) {
-      const newJust: Justification = {
-        id: data.id,
-        employeeId: data.employee_id,
-        attendanceDate: data.attendance_date,
-        reason: data.reason,
-        attachmentUrl: data.attachment_url,
-        status: data.status,
-        adminComment: data.admin_comment,
-        submissionDate: data.submission_date
-      };
-      this.justifications.update(list => [...list, newJust]);
+    if (!error) {
+      await this.loadJustifications();
     }
+    return !error;
   }
 
   async updateJustification(just: Justification) {
     const { error } = await this.supabase.client
       .from('justifications')
       .update({
-        reason: just.reason,
-        attachment_url: just.attachmentUrl,
         status: just.status,
         admin_comment: just.adminComment
       })
       .eq('id', just.id);
 
     if (!error) {
-      this.justifications.update(list => list.map(j => j.id === just.id ? just : j));
+      await this.loadJustifications();
     }
+    return !error;
   }
 
   async deleteJustificationsForEmployeeOnDate(empId: string, date: string) {
-    console.log(`Deleting justifications for employee ${empId} on date ${date}`);
     const { error } = await this.supabase.client
       .from('justifications')
       .delete()
       .eq('employee_id', empId)
       .eq('attendance_date', date);
 
-    if (error) {
-      console.error('Error deleting justifications:', error);
-      return false;
+    if (!error) {
+      await this.loadJustifications();
     }
-
-    this.justifications.update(list =>
-      list.filter(j => !(j.employeeId === empId && j.attendanceDate === date))
-    );
-    return true;
+    return !error;
   }
 
-  // Bulk Import Logic
-  async bulkUpsert(newEmployees: Employee[], newDepartments: string[]) {
-    console.log('bulkUpsert chamado com:', newEmployees.length, 'funcionários e', newDepartments.length, 'departamentos');
-
-    // Force refresh data to ensure we have latest from DB
-    await this.loadDepartments();
-    await this.loadEmployees();
-
-    // 1. Process Departments
-    const existingDepts = this.departments();
-    const existingDeptNames = existingDepts.map(d => d.name.toLowerCase());
-
-    let deptsAdded = 0;
-    const deptsToAdd: { name: string; description: string }[] = [];
-
-    newDepartments.forEach(deptName => {
-      if (!deptName) return;
-      // Also add to list if not strictly in local names, but upsert will handle DB conflicts
-      if (!existingDeptNames.includes(deptName.toLowerCase())) {
-        deptsToAdd.push({
-          name: deptName,
-          description: 'Importado automaticamente via Excel'
-        });
-        existingDeptNames.push(deptName.toLowerCase());
-        deptsAdded++;
-      }
-    });
-
-    if (deptsToAdd.length > 0) {
-      console.log('A inserir/atualizar departamentos:', deptsToAdd);
-      // Use UPSERT to handle race conditions or existing items gracefully
-      const { data, error } = await this.supabase.client
-        .from('departments')
-        .upsert(deptsToAdd, { onConflict: 'name', ignoreDuplicates: true })
-        .select();
-
-      if (error) {
-        console.error('Erro ao inserir departamentos:', error);
-      } else if (data) {
-        // Refresh departments again to get IDs generated by DB if needed, or just map result
-        console.log('Departamentos processados:', data.length);
-        // We reload to be sure we have clean state with IDs
-        await this.loadDepartments();
-      }
-    }
-
-    // 2. Process Employees
-    const currentEmps = this.employees();
-
-    // Create sets of known IDs and Emails to avoid duplicates within the batch and against DB
-    const knownEmployeeNumbers = new Set(currentEmps.map(e => e.employeeNumber));
-    const knownEmails = new Set(currentEmps.map(e => e.email));
-
+  async bulkUpsert(newEmployees: Employee[], newDepartments: string[]): Promise<{ empsAdded: number; empsSkipped: number }> {
     let empsAdded = 0;
     let empsSkipped = 0;
-    const empsToInsert: any[] = [];
 
-    newEmployees.forEach(newEmp => {
-      // Check against DB (via known sets) AND duplicates within this batch
-      const empNumExists = newEmp.employeeNumber && knownEmployeeNumbers.has(newEmp.employeeNumber);
-      const emailExists = newEmp.email && knownEmails.has(newEmp.email);
-
-      if (empNumExists || emailExists) {
-        empsSkipped++;
-      } else {
-        empsToInsert.push({
-          full_name: newEmp.fullName,
-          employee_number: newEmp.employeeNumber,
-          job_title: newEmp.jobTitle,
-          department: newEmp.department,
-          contract_type: newEmp.contractType,
-          admission_date: newEmp.admissionDate,
-          status: newEmp.status,
-          email: newEmp.email,
-          schedule_start: newEmp.scheduleStart,
-          schedule_end: newEmp.scheduleEnd
-        });
-
-        // Add to known sets so subsequent rows in this batch with same ID are skipped
-        if (newEmp.employeeNumber) knownEmployeeNumbers.add(newEmp.employeeNumber);
-        if (newEmp.email) knownEmails.add(newEmp.email);
-
-        empsAdded++;
+    // 1. Upsert departments
+    for (const deptName of newDepartments) {
+      const exists = this.departments().some(d => d.name === deptName);
+      if (!exists) {
+        await this.supabase.client
+          .from('departments')
+          .insert([{ name: deptName, description: '' }]);
       }
-    });
+    }
+    await this.loadDepartments();
 
-    console.log('Funcionários a inserir:', empsToInsert.length, '| Ignorados:', empsSkipped);
+    // 2. Upsert employees (skip if employeeNumber already exists)
+    const existingNumbers = new Set(this.employees().map(e => e.employeeNumber));
 
-    if (empsToInsert.length > 0) {
-      console.log('Amostra do primeiro funcionário:', empsToInsert[0]);
-      const { data, error } = await this.supabase.client
+    const toInsert: any[] = [];
+    for (const emp of newEmployees) {
+      if (existingNumbers.has(emp.employeeNumber)) {
+        empsSkipped++;
+        continue;
+      }
+      toInsert.push({
+        full_name: emp.fullName,
+        employee_number: emp.employeeNumber,
+        job_title: emp.jobTitle,
+        department: emp.department,
+        contract_type: emp.contractType,
+        admission_date: emp.admissionDate,
+        status: emp.status,
+        email: emp.email,
+        schedule_start: emp.scheduleStart,
+        schedule_end: emp.scheduleEnd
+      });
+    }
+
+    if (toInsert.length > 0) {
+      const { error } = await this.supabase.client
         .from('employees')
-        .insert(empsToInsert)
-        .select();
+        .insert(toInsert);
 
-      if (error) {
-        console.error('Erro ao inserir funcionários:', error);
-        alert('Erro ao salvar funcionários: ' + error.message);
-        return { deptsAdded, empsAdded: 0, empsSkipped };
-      } else if (data) {
-        console.log('Funcionários inseridos com sucesso:', data.length);
-        const mapped = data.map(e => ({
-          id: e.id,
-          fullName: e.full_name,
-          employeeNumber: e.employee_number,
-          jobTitle: e.job_title,
-          department: e.department,
-          contractType: e.contract_type,
-          admissionDate: e.admission_date,
-          supervisorId: e.supervisor_id,
-          status: e.status,
-          email: e.email,
-          scheduleStart: e.schedule_start,
-          scheduleEnd: e.schedule_end
-        }));
-        this.employees.update(list => [...list, ...mapped]);
+      if (!error) {
+        empsAdded = toInsert.length;
+      } else {
+        console.error('Erro ao inserir funcionários em bulk:', error);
       }
     }
 
-    console.log('bulkUpsert concluído:', { deptsAdded, empsAdded, empsSkipped });
-    return { deptsAdded, empsAdded, empsSkipped };
+    await this.loadEmployees();
+    return { empsAdded, empsSkipped };
   }
 }

@@ -32,11 +32,11 @@ import { CommonModule } from '@angular/common';
             <form (submit)="onLogin($event)">
               <div class="mb-4">
                 <label class="block text-gray-700 text-sm font-bold mb-2">Usuário</label>
-                <input type="text" [(ngModel)]="username" name="username" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="rhadmin" required>
+                <input type="text" [(ngModel)]="username" name="username" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="login" required>
               </div>
               <div class="mb-6">
                 <label class="block text-gray-700 text-sm font-bold mb-2">Senha</label>
-                <input type="password" [(ngModel)]="password" name="password" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="••••••" required>
+                <input type="password" [(ngModel)]="password" name="password" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="••••••••" required>
               </div>
               <button type="submit" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
                 Entrar

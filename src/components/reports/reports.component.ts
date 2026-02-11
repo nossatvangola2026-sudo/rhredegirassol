@@ -2,6 +2,7 @@ import { Component, inject, computed, signal } from '@angular/core';
 import { DataService } from '../../services/data.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-reports',
@@ -31,18 +32,27 @@ import { FormsModule } from '@angular/forms';
         </div>
 
         <!-- Department Filter -->
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-2">Departamento</label>
-          <select 
-            [ngModel]="selectedDept()" 
-            (ngModelChange)="selectedDept.set($event)"
-            class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 outline-none bg-white transition-shadow">
-            <option value="">Todos os Departamentos</option>
-            @for (dept of data.departments(); track dept.id) {
-              <option [value]="dept.name">{{ dept.name }}</option>
-            }
-          </select>
-        </div>
+        @if (!auth.hasRole(['COORDENADOR', 'DIRECTOR'])) {
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Departamento</label>
+            <select 
+              [ngModel]="selectedDept()" 
+              (ngModelChange)="selectedDept.set($event)"
+              class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 outline-none bg-white transition-shadow">
+              <option value="">Todos os Departamentos</option>
+              @for (dept of data.departments(); track dept.id) {
+                <option [value]="dept.name">{{ dept.name }}</option>
+              }
+            </select>
+          </div>
+        } @else {
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Departamento</label>
+            <div class="w-full border border-gray-100 bg-gray-50 rounded-lg px-4 py-2 text-gray-600 font-medium">
+              {{ auth.currentUser()?.departmentName }}
+            </div>
+          </div>
+        }
 
         <!-- Summary Widget -->
         <div class="flex items-end pb-2">
@@ -151,17 +161,23 @@ import { FormsModule } from '@angular/forms';
 })
 export class ReportsComponent {
   data = inject(DataService);
-  
+  auth = inject(AuthService);
+
   now = new Date();
-  
+
   // Filters
   selectedMonth = signal(new Date().toISOString().slice(0, 7)); // Defaults to Current Month YYYY-MM
   selectedDept = signal(''); // Empty = All
 
   reportData = computed(() => {
     const month = this.selectedMonth(); // '2024-02'
-    const deptName = this.selectedDept();
-    
+    const user = this.auth.currentUser();
+    const role = user?.role?.toUpperCase();
+    const isRestricted = role === 'COORDENADOR' || role === 'DIRECTOR';
+
+    // For restricted roles, always override selectedDept with their own department name
+    const deptName = isRestricted ? user.departmentName : this.selectedDept();
+
     // 1. Filter Employees by Dept
     let employees = this.data.employees();
     if (deptName) {
@@ -175,7 +191,7 @@ export class ReportsComponent {
     // 3. Map Data
     return employees.map(emp => {
       const empAtt = relevantAttendance.filter(a => a.employeeId === emp.id);
-      
+
       return {
         id: emp.id,
         employeeNumber: emp.employeeNumber,

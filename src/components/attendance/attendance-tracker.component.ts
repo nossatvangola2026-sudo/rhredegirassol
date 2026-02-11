@@ -18,10 +18,12 @@ import { CommonModule } from '@angular/common';
         </div>
         
         <!-- Button specifically for Exceptions -->
-        <button (click)="openExceptionModal()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg shadow-lg flex items-center gap-2 transition transform hover:-translate-y-0.5">
-           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-           Lançar Falta / Atraso
-        </button>
+        @if (auth.hasRole(['ADMIN', 'MANAGER', 'COORDENADOR', 'DIRECTOR'])) {
+          <button (click)="openExceptionModal()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg shadow-lg flex items-center gap-2 transition transform hover:-translate-y-0.5">
+             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+             Lançar Falta / Atraso
+          </button>
+        }
       </div>
 
       <!-- Exception Entry Modal (Strictly Faltas/Atrasos) -->
@@ -180,9 +182,9 @@ import { CommonModule } from '@angular/common';
       }
 
       <!-- Lists -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Daily Log -->
-        <div class="bg-white rounded-xl shadow-sm p-6">
+        <div class="bg-white rounded-xl shadow-sm p-6 lg:col-span-2">
           <div class="flex flex-col sm:flex-row justify-between items-center mb-4 border-b pb-2 gap-2">
              <div class="flex items-center gap-4">
                <h3 class="font-bold text-gray-800">Registos de</h3>
@@ -244,8 +246,8 @@ import { CommonModule } from '@angular/common';
                       }
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      @if ((record.status !== 'PRESENT' || !record.id.toString().startsWith('virtual-')) && auth.hasRole(['ADMIN', 'MANAGER'])) {
-                        <button (click)="revertStatus(record)" class="text-indigo-600 hover:text-indigo-900 font-bold bg-indigo-50 px-3 py-1 rounded-md hover:bg-indigo-100 transition-colors">Anular / Reverter</button>
+                      @if ((record.status !== 'PRESENT' || !record.id.toString().startsWith('virtual-')) && auth.hasRole(['ADMIN', 'MANAGER', 'COORDENADOR', 'DIRECTOR'])) {
+                        <button (click)="revertStatus(record)" class="text-indigo-600 hover:text-indigo-900 font-bold bg-indigo-50 px-3 py-1 rounded-md hover:bg-indigo-100 transition-colors">Anular</button>
                       }
                     </td>
                   </tr>
@@ -296,7 +298,7 @@ import { CommonModule } from '@angular/common';
                     }
                  }
 
-                 @if (auth.hasRole(['ADMIN', 'MANAGER']) && just.status === 'PENDING') {
+                 @if (auth.hasRole(['ADMIN', 'MANAGER', 'COORDENADOR', 'DIRECTOR']) && just.status === 'PENDING') {
                    <div class="flex gap-2 mt-2 pt-2 border-t border-gray-200">
                      <button (click)="approveJustification(just)" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 font-bold">Aprovar</button>
                      <button (click)="rejectJustification(just)" class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 font-bold">Rejeitar</button>
