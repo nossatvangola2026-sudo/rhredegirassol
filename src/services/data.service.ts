@@ -31,6 +31,8 @@ export class DataService {
       console.log('Utilizador detectado pelo DataService:', user?.username, '| Role:', user?.role);
       this.loadData();
     });
+
+    this.setupRealtimeSubscriptions();
   }
 
   /** Re-carrega todos os dados com o utilizador actual (chamar após login/restore). */
@@ -188,6 +190,26 @@ export class DataService {
         submissionDate: j.submission_date
       })));
     }
+  }
+
+  private setupRealtimeSubscriptions() {
+    // Subscrever mudanças nas presenças
+    this.supabase.client
+      .channel('attendance_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_records' }, () => {
+        console.log('Realtime: Mudança nas presenças detectada. Recarregando...');
+        this.loadAttendance();
+      })
+      .subscribe();
+
+    // Subscrever mudanças nas justificações
+    this.supabase.client
+      .channel('justification_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'justifications' }, () => {
+        console.log('Realtime: Mudança nas justificações detectada. Recarregando...');
+        this.loadJustifications();
+      })
+      .subscribe();
   }
 
   private async loadSystemConfig() {

@@ -28,7 +28,7 @@ import { Employee } from '../../services/data.types';
                 <input type="file" (change)="onFileChange($event)" class="sr-only" accept=".xlsx, .xls, .csv">
               </label>
             </div>
-            <p class="text-xs text-gray-500">Nota: O sistema ignorará as 2 primeiras linhas e lerá a partir da 3ª linha.</p>
+            <p class="text-xs text-gray-500">Nota: O sistema ignorará as 2 primeiras linhas e lê a partir da 3ª linha.</p>
           </div>
         </div>
       }
