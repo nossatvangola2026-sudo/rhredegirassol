@@ -246,7 +246,7 @@ import { CommonModule } from '@angular/common';
                       }
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      @if ((record.status !== 'PRESENT' || !record.id.toString().startsWith('virtual-')) && auth.hasRole(['ADMIN', 'MANAGER', 'COORDENADOR', 'DIRECTOR'])) {
+                      @if ((record.status !== 'PRESENT' || !record.id.toString().startsWith('virtual-')) && auth.hasRole(['ADMIN', 'MANAGER'])) {
                         <button (click)="revertStatus(record)" class="text-indigo-600 hover:text-indigo-900 font-bold bg-indigo-50 px-3 py-1 rounded-md hover:bg-indigo-100 transition-colors">Anular</button>
                       }
                     </td>
@@ -298,7 +298,7 @@ import { CommonModule } from '@angular/common';
                     }
                  }
 
-                 @if (auth.hasRole(['ADMIN', 'MANAGER', 'COORDENADOR', 'DIRECTOR']) && just.status === 'PENDING') {
+                 @if (auth.hasRole(['ADMIN', 'MANAGER']) && just.status === 'PENDING') {
                    <div class="flex gap-2 mt-2 pt-2 border-t border-gray-200">
                      <button (click)="approveJustification(just)" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 font-bold">Aprovar</button>
                      <button (click)="rejectJustification(just)" class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 font-bold">Rejeitar</button>
@@ -501,6 +501,9 @@ export class AttendanceTrackerComponent {
       }
     }
 
+    const userRole = this.auth.currentUser()?.role?.toUpperCase();
+    const canAutoApprove = userRole === 'ADMIN' || userRole === 'MANAGER';
+
     const record: AttendanceRecord = {
       id: existing?.id || `att-${Date.now()}`,
       employeeId: this.exceptionEntry.employeeId,
@@ -508,7 +511,7 @@ export class AttendanceTrackerComponent {
       checkIn: checkInIso || existing?.checkIn,
       checkOut: existing?.checkOut, // Preserve checkout if exists
       status: this.exceptionEntry.type,
-      isJustified: !!this.exceptionEntry.reason,
+      isJustified: (!!this.exceptionEntry.reason && canAutoApprove), // Only auto-justify if Admin/Manager
       overtimeHours: overtimeHours
     };
 
@@ -521,9 +524,9 @@ export class AttendanceTrackerComponent {
         attendanceDate: this.exceptionEntry.date,
         reason: this.exceptionEntry.reason,
         attachmentUrl: this.exceptionEntry.attachmentUrl,
-        status: 'APPROVED',
+        status: canAutoApprove ? 'APPROVED' : 'PENDING', // Pending if Coordinator/Director
         submissionDate: new Date().toISOString(),
-        adminComment: 'Lançado administrativamente.'
+        adminComment: canAutoApprove ? 'Lançado administrativamente.' : 'Submetido pelo departamento.'
       };
       await this.data.addJustification(just);
     }
@@ -572,28 +575,27 @@ export class AttendanceTrackerComponent {
   }
 
   async revertStatus(record: AttendanceRecord) {
-    if (!confirm('Tem certeza que deseja reverter este registo para PRESENTE? Isso removerá a falta/atraso e quaisquer justificativas associadas.')) return;
+    console.log('Iniciando Anulação do registo:', record);
+    if (!confirm('Tem certeza que deseja reverter este registo para PRESENTE? Isso removerá a falta/atraso e quaisquer justificativas associadas.')) {
+      console.log('Anulação cancelada pelo utilizador.');
+      return;
+    }
 
     const emp = this.data.getEmployeeById(record.employeeId);
-    if (!emp) return;
+    if (!emp) {
+      console.error('Funcionário não encontrado para anulação:', record.employeeId);
+      return;
+    }
 
-    const todayStr = record.date;
-    const startTime = (emp.scheduleStart || '08:00').substring(0, 5);
-    const endTime = (emp.scheduleEnd || '17:00').substring(0, 5);
+    // Removendo o registo de presença da base de dados (voltará a ser virtual PRESENT)
+    const success = await this.data.deleteAttendance(record.employeeId, record.date);
 
-    const resetRecord: AttendanceRecord = {
-      ...record,
-      checkIn: `${todayStr}T${startTime}:00`,
-      checkOut: `${todayStr}T${endTime}:00`,
-      status: 'PRESENT',
-      isJustified: false,
-      overtimeHours: 0
-    };
-
-    const success = await this.data.logAttendance(resetRecord);
     if (success) {
+      console.log('Registo de presença removido com sucesso. Removendo justificações...');
       await this.data.deleteJustificationsForEmployeeOnDate(record.employeeId, record.date);
+      console.log('Processo de anulação concluído.');
     } else {
+      console.error('Falha ao remover o registo de presença.');
       alert('Erro ao reverter o status. Consulte a consola.');
     }
   }

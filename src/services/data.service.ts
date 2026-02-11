@@ -442,6 +442,19 @@ export class DataService {
     return !error;
   }
 
+  async deleteAttendance(empId: string, date: string) {
+    const { error } = await this.supabase.client
+      .from('attendance_records')
+      .delete()
+      .eq('employee_id', empId)
+      .eq('date', date);
+
+    if (!error) {
+      await this.loadAttendance();
+    }
+    return !error;
+  }
+
   getAttendanceForEmployee(empId: string) {
     return this.attendance().filter(a => a.employeeId === empId);
   }
