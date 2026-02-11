@@ -1,12 +1,13 @@
-import { Component, inject, computed } from '@angular/core';
+import { Component, inject, computed, signal } from '@angular/core';
 import { DataService } from '../../services/data.service';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="space-y-6">
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-xl shadow-sm border border-gray-100 gap-4">
@@ -15,6 +16,27 @@ import { AuthService } from '../../services/auth.service';
           <p class="text-sm text-gray-500">Gestão centralizada de funcionários e presenças.</p>
         </div>
 
+        <!-- Month/Year Selector -->
+        <div class="flex items-center gap-3 bg-gray-50 p-2 rounded-lg border border-gray-200">
+          <div class="flex items-center gap-2">
+            <label class="text-xs font-bold text-gray-500 uppercase px-1">Mês:</label>
+            <select [(ngModel)]="selectedMonth" 
+                    class="bg-white border rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              @for (m of months; track $index) {
+                <option [value]="$index">{{ m }}</option>
+              }
+            </select>
+          </div>
+          <div class="flex items-center gap-2 border-l pl-3">
+            <label class="text-xs font-bold text-gray-500 uppercase px-1">Ano:</label>
+            <select [(ngModel)]="selectedYear" 
+                    class="bg-white border rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              @for (y of years; track y) {
+                <option [value]="y">{{ y }}</option>
+              }
+            </select>
+          </div>
+        </div>
       </div>
       
       <!-- Cards Grid -->
@@ -114,15 +136,40 @@ import { AuthService } from '../../services/auth.service';
 export class DashboardComponent {
   data = inject(DataService);
 
+  // Filter Signals
+  selectedMonth = signal<number>(new Date().getMonth());
+  selectedYear = signal<number>(new Date().getFullYear());
+
+  months = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ];
+
+  years = [2024, 2025, 2026];
+
   totalEmployees = computed(() => this.data.employees().length);
 
   monthlyAbsences = computed(() => {
-    // Simple filter for demo: count all 'ABSENT' records
-    return this.data.attendance().filter(a => a.status === 'ABSENT').length;
+    const month = this.selectedMonth();
+    const year = this.selectedYear();
+
+    return this.data.attendance().filter(a => {
+      const recordDate = new Date(a.date);
+      // a.date is YYYY-MM-DD, but new Date() might have timezone issues. 
+      // safer way:
+      const [y, m, d] = a.date.split('-').map(Number);
+      return a.status === 'ABSENT' && (m - 1) === month && y === year;
+    }).length;
   });
 
   monthlyDelays = computed(() => {
-    return this.data.attendance().filter(a => a.status === 'LATE').length;
+    const month = this.selectedMonth();
+    const year = this.selectedYear();
+
+    return this.data.attendance().filter(a => {
+      const [y, m, d] = a.date.split('-').map(Number);
+      return a.status === 'LATE' && (m - 1) === month && y === year;
+    }).length;
   });
 
   pendingJustifications = computed(() => {

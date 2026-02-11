@@ -62,4 +62,19 @@ export interface SystemConfig {
   customCss?: string; // For "Frontend" changes
   licenseKey?: string; // Activation key
   licenseExpirationDate?: string; // ISO Date for expiration override
+  biometricIp?: string; // IP address of the biometric device
+  bridgeStatus?: 'ONLINE' | 'OFFLINE' | 'ERROR';
+  bridgeLastSeen?: string;
+  bridgeLog?: string;
+  bridgeCommand?: string;
+  bridgeScanResults?: any[];
 }
+
+export interface BiometricDeviceUser {
+  id: string;
+  deviceUserId: string;
+  name: string;
+  cardNumber: string;
+  lastSync: string;
+}
+

@@ -7,17 +7,6 @@ Este guia explica como colocar o seu biométrico a comunicar directamente com o 
 2. [Node.js](https://nodejs.org/) instalado nesse computador.
 3. O endereço IP da máquina biométrica (ex: `192.168.1.100`).
 
-## Instruções de Instalação
-
-1. Abra o terminal (ou CMD) na pasta `biometric-integration`.
-2. Instale as bibliotecas necessárias com o comando:
-   ```bash
-   npm install node-zklib @supabase/supabase-js
-   ```
-3. Abra o ficheiro `biometric-bridge.js` e altere o `DEVICE_IP` para o IP correcto do seu aparelho.
-4. Inicie a sincronização:
-   ```bash
-   node biometric-bridge.js
    ```
 
 ## Configuração da Base de Dados

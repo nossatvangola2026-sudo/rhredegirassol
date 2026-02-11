@@ -69,9 +69,37 @@ import { SystemConfig } from '../../services/data.types';
                 <input type="text" [(ngModel)]="config.logoUrl" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="https://...">
                 <p class="text-xs text-gray-400">Recomendado: Imagem PNG transparente, fundo claro/escuro compatível.</p>
               </div>
-              <div class="col-span-2 space-y-2">
+              <div class="col-span-1 space-y-2">
                 <label class="block text-sm font-semibold text-gray-700">Descrição do Sistema</label>
                 <input type="text" [(ngModel)]="config.description" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500">
+              </div>
+              <div class="space-y-2">
+                  <label class="block text-sm font-semibold text-gray-700 font-mono flex items-center gap-2">
+                    IP do Biométrico (ZK)
+                    <button (click)="searchDevices()" 
+                            [disabled]="scanning"
+                            class="ml-auto text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100 transition flex items-center gap-1">
+                      <svg [class.animate-spin]="scanning" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                      {{ scanning ? 'A procurar...' : 'Procurar na Rede' }}
+                    </button>
+                  </label>
+                  <div class="relative">
+                    <input type="text" [(ngModel)]="config.biometricIp" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 font-mono" placeholder="ex: 192.168.1.100">
+                    
+                    <!-- Scan Results Dropdown -->
+                    @if (data.systemConfig().bridgeScanResults?.length) {
+                      <div class="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-xl overflow-hidden max-h-40 overflow-y-auto">
+                        <div class="p-2 text-[10px] font-bold text-gray-400 bg-gray-50 uppercase">Dispositivos Encontrados:</div>
+                        @for (res of data.systemConfig().bridgeScanResults; track res.ip) {
+                          <button (click)="config.biometricIp = res.ip" class="w-full text-left px-4 py-2 text-sm hover:bg-blue-50 transition flex justify-between">
+                            <span class="font-mono">{{ res.ip }}</span>
+                            <span class="text-xs text-gray-400">Porta 4370</span>
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                  <p class="text-[10px] text-gray-400">Usado pela ponte local para sincronização em tempo real.</p>
               </div>
           </div>
         </div>
@@ -134,6 +162,34 @@ import { SystemConfig } from '../../services/data.types';
                  <label class="block text-sm font-semibold text-gray-700">Chave de Ativação (Manual)</label>
                  <input type="text" [(ngModel)]="config.licenseKey" class="w-full px-4 py-2 border rounded-lg focus:ring-red-500 focus:border-red-500 font-mono tracking-widest text-gray-600 font-bold" placeholder="Insira a chave de desbloqueio">
              </div>
+
+              <!-- Bridge Status Card -->
+              <div class="p-4 bg-gray-50 rounded-xl border border-gray-200 mt-4">
+                <h4 class="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-2">
+                  <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                  Ponte de Comunicação (Middleware)
+                </h4>
+                
+                <div class="flex items-center justify-between mb-4">
+                  <div class="flex items-center gap-3">
+                    <div [class]="'w-3 h-3 rounded-full ' + (data.systemConfig().bridgeStatus === 'ONLINE' ? 'bg-green-500 animate-pulse' : 'bg-gray-400')"></div>
+                    <span class="text-sm font-bold text-gray-700">
+                      Estado: {{ data.systemConfig().bridgeStatus || 'OFFLINE' }}
+                    </span>
+                  </div>
+                  <span class="text-[10px] text-gray-400 italic">Visto em: {{ data.systemConfig().bridgeLastSeen | date:'HH:mm:ss dd/MM' }}</span>
+                </div>
+
+                <div class="bg-gray-900 rounded p-3 font-mono text-[10px] text-green-400 min-h-[40px] border border-gray-800">
+                   <p class="opacity-50 text-[8px] mb-1">Última actividade da ponte:</p>
+                   {{ data.systemConfig().bridgeLog || 'A aguardar sinal da ponte local...' }}
+                </div>
+                
+                <p class="text-[9px] text-gray-500 mt-2 leading-tight">
+                  <svg class="w-3 h-3 inline text-amber-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                  A ponte local é necessária para ligar o aparelho à nuvem. Configure o IP acima e inicie o script <code>biometric-bridge.js</code>.
+                </p>
+              </div>
           </div>
         </div>
 
@@ -176,21 +232,140 @@ import { SystemConfig } from '../../services/data.types';
           </div>
         </div>
 
+        <!-- Section 6: Biometric Monitor -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-indigo-500 overflow-hidden">
+          <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold text-gray-800 text-lg flex items-center gap-2">
+                <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A10.003 10.003 0 0012 3c1.268 0 2.39.234 3.414.659m-4.742 7.318l-3.042-4.13m8.174 8.54l-3.042-4.13l3.042-4.13m-2.5 9.25a2.41 2.41 0 11-4.82 0 2.41 2.41 0 014.82 0z"></path></svg>
+                Monitor Biométrico (Device Data)
+              </h3>
+              <div class="flex gap-2">
+                <span class="px-2 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded uppercase">
+                  Cache: {{ data.biometricUsers().length }} Utilizadores
+                </span>
+                <button (click)="data.reloadData()" class="p-1 hover:bg-gray-100 rounded transition" title="Recarregar Dados">
+                  <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                </button>
+              </div>
+          </div>
+
+          <div class="p-4 bg-indigo-50 rounded-lg mb-4 text-xs text-indigo-800 border border-indigo-100 flex items-start gap-3">
+             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+             <div>
+               <strong>Como ler este monitor:</strong> Os dados abaixo vêm directamente do aparelho físico via Middleware. 
+               Se um utilizador estiver <span class="text-green-600 font-bold">VINCULADO</span>, significa que o ID na máquina corresponde ao Nº de Funcionário no sistema de RH.
+             </div>
+          </div>
+
+          <div class="overflow-x-auto border rounded-lg">
+              <table class="w-full text-left text-sm">
+                  <thead class="bg-gray-50 text-gray-600 font-bold border-b">
+                      <tr>
+                          <th class="px-4 py-3">ID MÁQUINA</th>
+                          <th class="px-4 py-3">NOME NO DISPOSITIVO</th>
+                          <th class="px-4 py-3">CARTÃO/UID</th>
+                          <th class="px-4 py-3">STATUS DE VÍNCULO</th>
+                          <th class="px-4 py-3">ÚLTIMA SINCRONIZAÇÃO</th>
+                      </tr>
+                  </thead>
+                  <tbody class="divide-y">
+                      @for (user of data.biometricUsers(); track user.id) {
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-4 py-3 font-mono font-bold text-indigo-600">{{ user.deviceUserId }}</td>
+                            <td class="px-4 py-3">{{ user.name || '---' }}</td>
+                            <td class="px-4 py-3 text-gray-400 font-mono text-xs">{{ user.cardNumber || 'Sem Cartão' }}</td>
+                            <td class="px-4 py-3">
+                                @if (isLinked(user.deviceUserId)) {
+                                  <span class="flex items-center gap-1 text-green-600 font-bold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                                    VINCULADO ({{ getEmployeeName(user.deviceUserId) }})
+                                  </span>
+                                } @else {
+                                  <span class="flex items-center gap-1 text-amber-500 font-medium">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                                    NÃO ENCONTRADO NO RH
+                                  </span>
+                                }
+                            </td>
+                            <td class="px-4 py-3 text-gray-500 text-xs italic">{{ user.lastSync | date:'dd/MM/yyyy HH:mm:ss' }}</td>
+                        </tr>
+                      } @empty {
+                        <tr>
+                            <td colspan="5" class="px-4 py-10 text-center text-gray-400 italic">
+                                Sem dados do dispositivo. Certifique-se que o Middleware está em execução.
+                            </td>
+                        </tr>
+                      }
+                  </tbody>
+              </table>
+          </div>
+        </div>
+
         <!-- Section 4: Backend / Data Management -->
         <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-red-500">
           <h3 class="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
             <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
-            Limpeza de Dados
+            Gestão Crítica de Dados
           </h3>
           
-          <div class="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-100">
-              <div>
-                <h4 class="font-bold text-red-800">Limpar Histórico de Presenças</h4>
-                <p class="text-sm text-red-600">Elimina apenas os dados de presença, falta e justificativos. Mantém funcionários e configurações.</p>
+          <div class="space-y-4">
+              <div class="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-100">
+                  <div>
+                    <h4 class="font-bold text-red-800">Limpar Histórico de Presenças</h4>
+                    <p class="text-sm text-red-600">Elimina presenças e justificativos. Mantém funcionários.</p>
+                  </div>
+                  <button (click)="confirmReset()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded shadow">
+                    Limpar Presenças
+                  </button>
               </div>
-              <button (click)="confirmReset()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded shadow">
-                Executar Limpeza
-              </button>
+
+              <div class="flex items-center justify-between p-4 bg-orange-50 rounded-lg border border-orange-100">
+                  <div>
+                    <h4 class="font-bold text-orange-800">Reset de Utilizadores</h4>
+                    <p class="text-sm text-orange-600">Apaga todos os utilizadores excepto o "admin".</p>
+                  </div>
+                  <button (click)="resetUsers()" class="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded shadow">
+                    Wipe Utilizadores
+                  </button>
+              </div>
+
+              <div class="flex items-center justify-between p-4 bg-gray-900 rounded-lg border border-gray-700">
+                  <div>
+                    <h4 class="font-bold text-white">FACTORY RESET (HARD)</h4>
+                    <p class="text-sm text-gray-400">Apaga TUDO (Funcionários, Presenças, Justificativos).</p>
+                  </div>
+                  <button (click)="hardResetAll()" class="bg-white hover:bg-gray-200 text-black font-bold py-2 px-4 rounded shadow">
+                    Reset Total
+                  </button>
+              </div>
+          </div>
+        </div>
+
+        <!-- Section 5: System Diagnostics -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-emerald-500">
+          <h3 class="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+            Diagnóstico do Sistema
+          </h3>
+          
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <p class="text-xs text-gray-500 uppercase font-bold mb-1">Status Base de Dados</p>
+                  <div class="flex items-center gap-2">
+                      <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
+                      <span class="text-sm font-bold text-gray-800">Supabase Online</span>
+                  </div>
+              </div>
+              <div class="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <p class="text-xs text-gray-500 uppercase font-bold mb-1">Versão do LocalStorage</p>
+                  <span class="text-sm font-mono text-gray-800">v2.1.0-biometric</span>
+              </div>
+              <div class="flex items-center">
+                  <button (click)="testConnection()" class="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    Testar Conexão Supabase
+                  </button>
+              </div>
           </div>
         </div>
       </div>
@@ -253,10 +428,50 @@ export class DeveloperSettingsComponent {
   }
 
   async confirmReset() {
-    if (confirm('ATENÇÃO: Esta ação eliminará TODAS as presenças, faltas e justificativas registadas. \n\nOs dados dos funcionários e configurações SERÃO MANTIDOS.\n\nDeseja continuar?')) {
-      await this.data.resetAttendanceOnly();
-      alert('Histórico de presenças e justificativas foi apagado com sucesso.');
+    await this.data.resetAttendanceOnly();
+  }
+
+  async resetUsers() {
+    await this.data.hardResetUsers();
+  }
+
+  async hardResetAll() {
+    await this.data.resetAllData();
+  }
+
+  scanning = false;
+
+  async searchDevices() {
+    this.scanning = true;
+    await this.data.triggerBiometricScan();
+    // A cada 1s o DataService actualiza o bridgeScanResults via realtime
+    // Vamos esperar 5s e parar a animação
+    setTimeout(() => {
+      this.scanning = false;
+    }, 8000);
+  }
+
+  async testConnection() {
+    try {
+      this.queryResult = 'Testando conexão...\n';
+      const start = Date.now();
+      await this.data.reloadData();
+      const end = Date.now();
+      this.queryResult += `✅ Conexão com Supabase bem-sucedida!\n⏱️ Tempo de resposta: ${end - start}ms\n📡 Tabelas acessíveis: ${this.data.employees().length} funcionários carregados.`;
+      alert('Teste de conexão concluído com sucesso!');
+    } catch (err: any) {
+      this.queryResult = `❌ Erro na conexão: ${err.message}`;
+      alert('Falha ao conectar com o Supabase.');
     }
+  }
+
+  isLinked(deviceUserId: string): boolean {
+    return this.data.employees().some(e => e.employeeNumber === deviceUserId);
+  }
+
+  getEmployeeName(deviceUserId: string): string {
+    const emp = this.data.employees().find(e => e.employeeNumber === deviceUserId);
+    return emp ? emp.fullName : '---';
   }
 
   executeSql() {
@@ -277,8 +492,9 @@ export class DeveloperSettingsComponent {
       }
       // 2. DELETE Simulation
       else if (lowerCmd.startsWith('delete from')) {
-        const tableName = lowerCmd.split('from')[1]?.trim();
-        if (confirm(`Ação Irreversível: Tem a certeza que deseja apagar a tabela [${tableName}]?`)) {
+        const parts = lowerCmd.split('from');
+        const tableName = parts.length > 1 ? parts[1].trim() : '';
+        if (tableName && confirm(`Ação Irreversível: Tem a certeza que deseja apagar a tabela [${tableName}]?`)) {
           if (lowerCmd.includes('attendance')) { this.data.attendance.set([]); output = 'Table [Attendance] truncated (0 rows).'; }
           else if (lowerCmd.includes('justifications')) { this.data.justifications.set([]); output = 'Table [Justifications] truncated (0 rows).'; }
           else if (lowerCmd.includes('employees')) { this.data.employees.set([]); output = 'Table [Employees] truncated (0 rows).'; }

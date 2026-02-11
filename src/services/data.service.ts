@@ -1,5 +1,5 @@
 import { Injectable, signal, inject, effect } from '@angular/core';
-import { Employee, AttendanceRecord, Justification, Department, SystemConfig } from './data.types';
+import { Employee, AttendanceRecord, Justification, BiometricDeviceUser, Department, SystemConfig } from './data.types';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 
@@ -12,6 +12,7 @@ export class DataService {
   employees = signal<Employee[]>([]);
   attendance = signal<AttendanceRecord[]>([]);
   justifications = signal<Justification[]>([]);
+  biometricUsers = signal<BiometricDeviceUser[]>([]); // New signal
   departments = signal<Department[]>([]);
   serverTime = signal<Date>(new Date());
   deferredPrompt = signal<any>(null);
@@ -36,6 +37,14 @@ export class DataService {
   }
 
   /** Re-carrega todos os dados com o utilizador actual (chamar após login/restore). */
+  async triggerBiometricScan() {
+    await this.supabase.client
+      .from('system_config')
+      .update({ bridge_command: 'SCAN' })
+      .match({ id: '00000000-0000-0000-0000-000000000000' });
+  }
+
+  /** Re-carrega todos os dados com o utilizador actual (chamar após login/restore). */
   async reloadData() {
     await this.loadData();
   }
@@ -56,7 +65,8 @@ export class DataService {
     // 4. Load other data that depends on the filtered employees list
     await Promise.all([
       this.loadAttendance(),
-      this.loadJustifications()
+      this.loadJustifications(),
+      this.loadBiometricUsers() // Sync biometric device users
     ]);
 
     this.checkAutoAttendance();
@@ -210,6 +220,41 @@ export class DataService {
         this.loadJustifications();
       })
       .subscribe();
+
+    // Subscrever mudanças nos utilizadores do biométrico
+    this.supabase.client
+      .channel('biometric_user_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'biometric_device_users' }, () => {
+        console.log('Realtime: Mudança nos utilizadores do biométrico detectada.');
+        this.loadBiometricUsers();
+      })
+      .subscribe();
+
+    // Subscrever mudanças na configuração do sistema (Ponte)
+    this.supabase.client
+      .channel('system_config_changes')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'system_config' }, () => {
+        console.log('Realtime: Mudança na configuração do sistema detectada.');
+        this.loadSystemConfig();
+      })
+      .subscribe();
+  }
+
+  private async loadBiometricUsers() {
+    const { data, error } = await this.supabase.client
+      .from('biometric_device_users')
+      .select('*')
+      .order('device_user_id');
+
+    if (data && !error) {
+      this.biometricUsers.set(data.map(u => ({
+        id: u.id,
+        deviceUserId: u.device_user_id,
+        name: u.name,
+        cardNumber: u.card_number,
+        lastSync: u.last_sync
+      })));
+    }
   }
 
   private async loadSystemConfig() {
@@ -226,7 +271,13 @@ export class DataService {
         description: data.description,
         customCss: data.custom_css,
         licenseKey: data.license_key,
-        licenseExpirationDate: data.license_expiration_date
+        licenseExpirationDate: data.license_expiration_date,
+        biometricIp: data.biometric_ip,
+        bridgeStatus: data.bridge_status,
+        bridgeLastSeen: data.bridge_last_seen,
+        bridgeLog: data.bridge_log,
+        bridgeCommand: data.bridge_command,
+        bridgeScanResults: data.bridge_scan_results
       });
     }
   }
@@ -255,7 +306,8 @@ export class DataService {
           description: config.description,
           custom_css: config.customCss,
           license_key: config.licenseKey,
-          license_expiration_date: config.licenseExpirationDate
+          license_expiration_date: config.licenseExpirationDate,
+          biometric_ip: config.biometricIp
         })
         .eq('id', existing.id);
 
@@ -276,10 +328,26 @@ export class DataService {
   }
 
   async resetAttendanceOnly() {
-    if (!confirm('Delete all attendance and justifications?')) return;
+    if (!confirm('Deseja apagar TODO o histórico de presenças e justificações?')) return;
     await this.supabase.client.from('justifications').delete().neq('id', '0');
     await this.supabase.client.from('attendance_records').delete().neq('id', '0');
     await this.loadData();
+  }
+
+  async hardResetUsers() {
+    if (!confirm('CUIDADO: Isto apagará TODOS os utilizadores excepto o Administrador. Esta ação é irreversível. Continuar?')) return;
+    // We assume 'admin' is the username of the administrator
+    const { error } = await this.supabase.client
+      .from('users')
+      .delete()
+      .neq('username', 'admin');
+
+    if (!error) {
+      alert('Utilizadores apagados com sucesso (excepto admin).');
+    } else {
+      console.error('Erro ao apagar utilizadores:', error);
+      alert('Erro ao apagar utilizadores. Verifique a consola.');
+    }
   }
 
   async checkAutoAttendance() {
