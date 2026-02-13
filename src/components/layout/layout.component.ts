@@ -2,6 +2,7 @@ import { Component, inject, computed, ViewEncapsulation } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { DataService } from '../../services/data.service';
+import { PwaService } from '../../services/pwa.service';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer } from '@angular/platform-browser';
 
@@ -79,6 +80,23 @@ import { DomSanitizer } from '@angular/platform-browser';
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
             Sair
           </button>
+
+          <!-- Mobile App Section -->
+           <div class="pt-4 mt-4 border-t border-slate-700">
+             <p class="px-4 text-[10px] text-gray-500 font-bold uppercase mb-1">Mobile App</p>
+             
+             @if (pwa.installable()) {
+               <button (click)="pwa.promptInstall()" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors text-left text-green-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                  Instalar App
+               </button>
+             }
+
+             <a href="assets/downloads/app-release.apk" target="_blank" download class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                Baixar APK Android
+             </a>
+           </div>
         </nav>
       </aside>
 
@@ -108,6 +126,7 @@ import { DomSanitizer } from '@angular/platform-browser';
 export class LayoutComponent {
   auth = inject(AuthService);
   data = inject(DataService);
+  pwa = inject(PwaService);
   sanitizer = inject(DomSanitizer);
 
   // Compute safe HTML for Custom CSS injection

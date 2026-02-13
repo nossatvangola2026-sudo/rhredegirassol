@@ -1,0 +1,9 @@
+ATENÇÃO:
+
+Para que o download do aplicativo Android funcione no site, você deve:
+
+1. Gerar o arquivo APK no Android Studio (Build > Generate Signed Bundle / APK).
+2. Renomear o arquivo gerado para "app-release.apk".
+3. Colocar o arquivo NESTA pasta.
+
+Se este arquivo não existir, o site baixará uma página de erro (404) com o nome .apk, causando "Erro de Análise" ao tentar instalar no celular.

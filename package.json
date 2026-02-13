@@ -9,7 +9,11 @@
     "build": "ng build --base-href ./",
     "preview": "ng serve --configuration=production",
     "electron:dev": "electron .",
-    "electron:build": "npm run build && electron-builder"
+    "electron:build": "npm run build && electron-builder",
+    "build:mobile": "ng build --base-href ./ && npx cap sync",
+    "cap:sync": "npx cap sync",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios"
   },
   "dependencies": {
     "@angular/build": "^21.1.0",
@@ -21,6 +25,10 @@
     "@angular/forms": "^21.1.2",
     "@angular/platform-browser": "^21.1.0",
     "@angular/router": "^21.1.2",
+    "@capacitor/android": "^8.1.0",
+    "@capacitor/cli": "^8.1.0",
+    "@capacitor/core": "^8.1.0",
+    "@capacitor/ios": "^8.1.0",
     "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.93.3",
     "rxjs": "^7.8.2",
